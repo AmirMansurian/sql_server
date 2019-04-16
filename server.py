@@ -19,7 +19,8 @@ class Application(tornado.web.Application):
     def __init__(self):
         handlers = [
             (r"/signup", signup),
-            (r"/login" , login)
+            (r"/login" , login),
+            (r"/logout", logout),
         ]
         settings = dict()
         super(Application, self).__init__(handlers, **settings)
@@ -41,12 +42,13 @@ class BaseHandler(tornado.web.RequestHandler):
         else:
             return False
 
-    def token(self, token):
-        resuser = self.db.get("SELECT * from users where token = %s", token)
-        if resuser:
-            return True
-        else:
+    def check_token(self, user):
+        resuser = self.db.get("SELECT token from users where username = %s", user)
+
+        if resuser=="":
             return False
+        else:
+            return True
 
 
 
@@ -62,16 +64,78 @@ class signup (BaseHandler):
         pas=self.get_argument('password')
         firstname=self.get_argument ('firstname', None)
         lastname=self.get_argument('lastname', None)
+        token=""
+        type=1
 
         if not self.check_user(user):
 
-            self.db.execute ("INSERT INTO users (password, username, firstname, lastname) values (%s, %s, %s, %s)", user, pas, firstname, lastname)
+            self.db.execute ("INSERT INTO users (username, password, firstname, lastname, token, type) values (%s, %s, %s, %s, %s, %s)", user, pas, firstname, lastname, token, type)
+            out={"message": "Signed Up Successfully","code": "200"}
+            self.write(out)
 
 
 class login (BaseHandler):
     def post(self):
         user=self.get_argument('username')
         pas=self.get_argument('password')
+
+        pas_check=self.db.get("SELECT password from users where username = %s", user)
+
+        if not pas_check:
+            out = {"message": "check inputs!!!", "code": "400"}
+            self.write(out)
+
+        else:
+            pas_check=pas_check ["password"]
+
+            if pas==pas_check:
+
+                 if not self.check_token(user):
+                     tok=str(hexlify(os.urandom(16)))
+                     self.db.execute ("UPDATE users SET token=%s WHERE username=%s ", tok, user)
+                     out={"message": "Logged in Successfully", "code": "200", "token": tok}
+                     self.write(out)
+
+                 else :
+                     out={"maessage": "already logged in!!!", "code": '400'}
+                     self.write(out)
+
+            else :
+                out={"message": "check inputs!!!", "code": "400"}
+                self.write(out)
+
+
+class logout (BaseHandler):
+    def post(self):
+        user=self.get_argument('username')
+        pas=self.get_argument('password')
+        pas_check = self.db.get("SELECT password from users where username = %s", user)
+
+        if not pas_check:
+            out = {"message": "check inputs!!!", "code": "400"}
+            self.write(out)
+
+        else :
+            pas_check=pas_check["password"]
+
+            if pas==pas_check:
+                if self.check_token(user):
+                    tok=""
+                    self.db.execute ("UPDATE users SET token=%s WHERE username=%s", tok, user)
+                    out={"message": "logged out!!!", 'code': '200'}
+                    self.write(out)
+
+                else:
+                    out={'message': 'already logged out!!!', 'code': '400'}
+                    self.write(out)
+
+            else:
+                out = {"message": "check inputs!!!", "code": "400"}
+                self.write(out)
+
+
+
+
 
 
 def main():
