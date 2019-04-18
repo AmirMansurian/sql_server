@@ -45,6 +45,7 @@ class BaseHandler(tornado.web.RequestHandler):
 
     def check_user(self, user):
         resuser = self.db.get("SELECT * from users where username = %s", user)
+
         if resuser:
             return True
         else:
@@ -52,6 +53,7 @@ class BaseHandler(tornado.web.RequestHandler):
 
     def check_token(self, user):
         resuser = self.db.get("SELECT token from users where username = %s", user)
+        resuser=resuser['token']
 
         if resuser=="":
             return False
@@ -108,7 +110,7 @@ class login (BaseHandler):
                      self.write(out)
 
                  else :
-                     out={"maessage": "already logged in!!!", "code": '400'}
+                     out={"message": "already logged in!!!", "code": '400'}
                      self.write(out)
 
             else :
@@ -131,7 +133,7 @@ class logout (BaseHandler):
 
             if pas==pas_check:
                 if self.check_token(user):
-                    tok=None
+                    tok=""
                     self.db.execute ("UPDATE users SET token=%s WHERE username=%s", tok, user)
                     out={"message": "logged out!!!", 'code': '200'}
                     self.write(out)
