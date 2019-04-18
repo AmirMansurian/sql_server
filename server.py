@@ -5,6 +5,7 @@ import tornado.ioloop
 import tornado.options
 import tornado.web
 import os
+import datetime
 from binascii import hexlify
 from tornado.options import define, options
 
@@ -21,6 +22,13 @@ class Application(tornado.web.Application):
             (r"/signup", signup),
             (r"/login" , login),
             (r"/logout", logout),
+            (r"/sendticket", sendticket),
+            (r"/closeticket", closeticket),
+            (r"/getticketcli", getticketcli),
+            (r"/restoticketmod", restoticketmod),
+            (r"/changestatus", changestatus),
+            (r"/getticketmod", getticketmod),
+            (r".*", defaulthandler),
         ]
         settings = dict()
         super(Application, self).__init__(handlers, **settings)
@@ -51,11 +59,10 @@ class BaseHandler(tornado.web.RequestHandler):
             return True
 
 
-
-
 class defaulthandler(BaseHandler):
-    def get(self, *args, **kwargs):
-            print()
+    def post(self):
+        out={'message': 'unknown command!!!', 'code' : '400'}
+        self.write(out)
 
 
 class signup (BaseHandler):
@@ -64,17 +71,21 @@ class signup (BaseHandler):
         pas=self.get_argument('password')
         firstname=self.get_argument ('firstname', None)
         lastname=self.get_argument('lastname', None)
-        token=""
-        type=1
+        type=self.get_argument('type', 0)
 
         if not self.check_user(user):
 
-            self.db.execute ("INSERT INTO users (username, password, firstname, lastname, token, type) values (%s, %s, %s, %s, %s, %s)", user, pas, firstname, lastname, token, type)
+            self.db.execute ("INSERT INTO users (username, password, firstname, lastname, type) values (%s, %s, %s, %s, %s)", user, pas, firstname, lastname, type)
             out={"message": "Signed Up Successfully","code": "200"}
+            self.write(out)
+
+        else :
+            out={'message': 'username already taken!!!', 'code': '400'}
             self.write(out)
 
 
 class login (BaseHandler):
+
     def post(self):
         user=self.get_argument('username')
         pas=self.get_argument('password')
@@ -120,7 +131,7 @@ class logout (BaseHandler):
 
             if pas==pas_check:
                 if self.check_token(user):
-                    tok=""
+                    tok=None
                     self.db.execute ("UPDATE users SET token=%s WHERE username=%s", tok, user)
                     out={"message": "logged out!!!", 'code': '200'}
                     self.write(out)
@@ -134,8 +145,157 @@ class logout (BaseHandler):
                 self.write(out)
 
 
+class sendticket (BaseHandler):
+    def post(self):
+        tok=self.get_argument('token')
+        subject=self.get_argument('subject')
+        body=self.get_argument('body')
+        user = self.db.get("SELECT id from users where token = %s", tok)
+        user=user['id']
+        now=datetime.datetime.now()
+        date=str(now.strftime("%Y-%m-%d %H:%M:%S"))
+        status=self.get_argument('type', "open")
+        self.db.execute("INSERT INTO tickets (subject, body, user_related, date, status) VALUES (%s, %s, %s, %s, %s)", subject, body, user, date, status)
+
+        max_id=self.db.get("SELECT MAX(id)  FROM tickets")
+        max_id=max_id['MAX(id)']
+
+        out={'message': 'ticket sent!!!', 'id': str(max_id), 'code': '200'}
+        self.write(out)
 
 
+class closeticket (BaseHandler):
+    def post (self):
+        tok=self.get_argument('token')
+        id=self.get_argument('id')
+
+        id_check=self.db.get("SELECT user_related from tickets where id=%s", id)
+        id_check2=self.db.get("SELECT id from users where token =%s", tok)
+
+        id_check2=id_check2['id']
+        id_check=id_check['user_related']
+
+        if id_check==id_check2 :
+            self.db.execute("UPDATE tickets SET status=%s WHERE id=%s", 'close', id)
+
+            message="Ticket With id -"+str(id)+"- Closed Successfully"
+            out = {'message' : message, 'code': '200'}
+            self.write(out)
+
+        else :
+            out = {"message": 'permision denied!!!', 'code': '400'}
+            self.write(out)
+
+
+class getticketcli (BaseHandler):
+    def post(self):
+        tok=self.get_argument('token')
+        id=self.db.get ("SELECT id from users where token=%s", tok)
+        id=id['id']
+        count=self.db.get("SELECT COUNT(id) from tickets where user_related=%s", id)
+        count=count['COUNT(id)']
+
+        message="There Are -"+str(count)+"- Ticket"
+        out={'tickets': message, 'code': '200'}
+
+        messages=self.db.query("SELECT * from tickets where  user_related=%s", id)
+
+        counter=0
+
+        for x in messages:
+            subject=x['subject']
+            body=x['body']
+            status=x['status']
+            id=x['id']
+            date=x['date']
+            out1={'subject': subject, 'body': body, 'status': status, 'id': id, 'date': date}
+            mes="block "+str(counter)
+            out2={mes: out1}
+            out.update(out2)
+            counter=counter+1
+
+        self.write(out)
+
+
+class restoticketmod (BaseHandler):
+        def post(self):
+            tok=self.get_argument('token')
+            body=self.get_argument('body')
+            id=self.get_argument('id')
+            check_admin=self.db.get("SELECT type from users where token=%s", tok)
+            check_admin=check_admin['type']
+
+
+            if check_admin:
+                self.db.execute("UPDATE tickets SET replay=%s where id=%s", body, id)
+
+                message="Response to Ticket With id - "+str(id)+" - Sent Successfully"
+                out={'message': message, 'code': '200'}
+                self.write(out)
+
+            else:
+                out={'message': 'permision dineid!!!', 'code': '400'}
+                self.write(out)
+
+
+class changestatus(BaseHandler):
+    def post(self):
+        tok=self.get_argument('token')
+        id=self.get_argument('id')
+        status=self.get_argument('status')
+        check_admin = self.db.get("SELECT type from users where token=%s", tok)
+        check_admin = check_admin['type']
+
+        if check_admin:
+            self.db.execute("UPDATE tickets SET status=%s where id=%s", status, id)
+
+            message= "Status Ticket With id -"+str(id)+"- Changed Successfully"
+            out={'message': message, 'code': '200'}
+            self.write(out)
+
+        else:
+            out = {'message': 'permision dineid!!!', 'code': '400'}
+            self.write(out)
+
+
+class getticketmod(BaseHandler):
+
+    def post(self):
+        tok=self.get_argument('token')
+        id=self.db.get ("SELECT id from users where token=%s", tok)
+        id=id['id']
+        count=self.db.get("SELECT COUNT(id) from tickets")
+        count=count['COUNT(id)']
+
+        check_admin = self.db.get("SELECT type from users where token=%s", tok)
+        check_admin = check_admin['type']
+
+        if check_admin:
+
+            message="There Are -"+str(count)+"- Ticket"
+            out={'tickets': message, 'code': '200'}
+
+            messages=self.db.query("SELECT * from tickets")
+
+            counter=0
+
+            for x in messages:
+                subject=x['subject']
+                body=x['body']
+                status=x['status']
+                id=x['id']
+                date=x['date']
+                out1={'subject': subject, 'body': body, 'status': status, 'id': id, 'date': date}
+                mes="block "+str(counter)
+                out2={mes: out1}
+                out.update(out2)
+                counter=counter+1
+
+            self.write(out)
+
+        else:
+            out={'message': 'permision denied!!!', 'code': '200'}
+            self.write(out)
 
 
 def main():
