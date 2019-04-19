@@ -55,8 +55,9 @@ class BaseHandler(tornado.web.RequestHandler):
         resuser = self.db.get("SELECT token from users where username = %s", user)
         resuser=resuser['token']
 
-        if resuser=="":
+        if resuser=="" :
             return False
+
         else:
             return True
 
@@ -69,15 +70,16 @@ class defaulthandler(BaseHandler):
 
 class signup (BaseHandler):
     def post(self):
-        user=self.get_query_argument('username')
+        user=self.get_argument('username')
         pas=self.get_argument('password')
         firstname=self.get_argument ('firstname', None)
         lastname=self.get_argument('lastname', None)
         type=self.get_argument('type', 0)
+        tok=""
 
         if not self.check_user(user):
 
-            self.db.execute ("INSERT INTO users (username, password, firstname, lastname, type) values (%s, %s, %s, %s, %s)", user, pas, firstname, lastname, type)
+            self.db.execute ("INSERT INTO users (username, password, firstname, lastname, type, token) values (%s, %s, %s, %s, %s, %s)", user, pas, firstname, lastname, type, tok)
             out={"message": "Signed Up Successfully","code": "200"}
             self.write(out)
 
@@ -296,7 +298,7 @@ class getticketmod(BaseHandler):
             self.write(out)
 
         else:
-            out={'message': 'permision denied!!!', 'code': '200'}
+            out={'tickets': 'permision denied!!!', 'code': '200'}
             self.write(out)
 
 

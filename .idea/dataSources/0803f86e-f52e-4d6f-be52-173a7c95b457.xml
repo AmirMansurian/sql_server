@@ -984,7 +984,6 @@
     <column id="241" parent="227" name="token">
       <Position>6</Position>
       <DataType>text|0s</DataType>
-      <NotNull>1</NotNull>
       <ColumnKind>normal</ColumnKind>
     </column>
     <column id="242" parent="227" name="type">
